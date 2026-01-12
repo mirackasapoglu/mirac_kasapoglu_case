@@ -21,9 +21,130 @@ public class JobsListingPage {
     private final By departmentFilter = By.xpath("//select[@id='filter-by-department' or @name='filter-by-department'] | //label[normalize-space()='Department']/following::select[1]");
     private final By jobListContainer = By.xpath("//div[contains(@class,'positions') or contains(@class,'jobs-list') or contains(@class,'position-list') or contains(@class,'careers') or contains(@class,'jobs')]");
     private final By jobCards = By.xpath("//div[contains(@class,'position') or contains(@class,'job') or contains(@class,'list-item') or contains(@class,'role')]");
+    
+    // Cookie banner locators (same as HomePage)
+    private final By cookieBannerContainer = By.xpath(
+        "//div[contains(@class, 'cookie') or contains(@class, 'consent') or contains(@id, 'cookie') or contains(@id, 'consent')] | " +
+        "//div[@role='dialog' and (contains(., 'cookie') or contains(., 'Cookie'))] | " +
+        "//*[contains(@class, 'cookie-banner') or contains(@class, 'cookie-consent') or contains(@id, 'cookie-banner')] | " +
+        "//div[contains(@class, 'cli-bar-container')]"
+    );
+    private final By acceptAllButton = By.xpath(
+        "//a[@id='wt-cli-accept-all-btn'] | " +
+        "//button[@id='wt-cli-accept-all-btn'] | " +
+        "//button[normalize-space()='Accept All' or contains(., 'Accept All')] | " +
+        "//a[normalize-space()='Accept All' or contains(., 'Accept All')] | " +
+        "//button[contains(@class, 'accept') and (contains(., 'All') or contains(., 'all'))]"
+    );
 
     public JobsListingPage(WebDriver driver) {
         this.driver = driver;
+    }
+
+    // Accept cookies if banner is present (can appear on this page)
+    public void acceptCookiesIfPresent(Waits waits) {
+        try {
+            // Use extended wait for banner to appear (cookie banners can take time to load)
+            org.openqa.selenium.support.ui.WebDriverWait extendedWait = new org.openqa.selenium.support.ui.WebDriverWait(
+                driver, java.time.Duration.ofSeconds(20));
+            
+            // Small delay to let banner appear
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            
+            // Wait for cookie banner to appear and be visible - try multiple locators
+            WebElement banner = null;
+            try {
+                // First try: cli-bar-container (most specific)
+                banner = extendedWait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.xpath("//div[contains(@class, 'cli-bar-container')]")));
+                extendedWait.until(ExpectedConditions.visibilityOf(banner));
+            } catch (org.openqa.selenium.TimeoutException e) {
+                try {
+                    // Second try: generic cookie banner
+                    banner = extendedWait.until(ExpectedConditions.presenceOfElementLocated(cookieBannerContainer));
+                    extendedWait.until(ExpectedConditions.visibilityOf(banner));
+                } catch (org.openqa.selenium.TimeoutException ex) {
+                    return; // No banner found - continue silently
+                }
+            }
+            
+            if (!banner.isDisplayed()) {
+                return; // Banner not visible
+            }
+            
+            // Wait for Accept All button - try ID first (most reliable)
+            WebElement acceptButton = null;
+            try {
+                // First try: find button by ID (most reliable)
+                acceptButton = extendedWait.until(ExpectedConditions.presenceOfElementLocated(
+                    By.xpath("//a[@id='wt-cli-accept-all-btn'] | //button[@id='wt-cli-accept-all-btn']")));
+                extendedWait.until(ExpectedConditions.visibilityOf(acceptButton));
+                extendedWait.until(ExpectedConditions.elementToBeClickable(acceptButton));
+            } catch (org.openqa.selenium.TimeoutException e) {
+                try {
+                    // Second try: find button inside banner
+                    acceptButton = banner.findElement(By.xpath(".//a[@id='wt-cli-accept-all-btn'] | .//button[@id='wt-cli-accept-all-btn']"));
+                    extendedWait.until(ExpectedConditions.visibilityOf(acceptButton));
+                    extendedWait.until(ExpectedConditions.elementToBeClickable(acceptButton));
+                } catch (org.openqa.selenium.NoSuchElementException | org.openqa.selenium.TimeoutException ex) {
+                    try {
+                        // Third try: find button globally by text
+                        acceptButton = extendedWait.until(ExpectedConditions.elementToBeClickable(acceptAllButton));
+                    } catch (org.openqa.selenium.TimeoutException ex2) {
+                        return; // Button not found - continue silently
+                    }
+                }
+            }
+            
+            // Click with retry handling - try multiple methods
+            boolean clicked = false;
+            int retries = 3;
+            for (int i = 0; i < retries && !clicked; i++) {
+                try {
+                    // Method 1: JavaScript click (most reliable for cookie banners)
+                    ((org.openqa.selenium.JavascriptExecutor) driver).executeScript("arguments[0].click();", acceptButton);
+                    clicked = true;
+                } catch (Exception e) {
+                    try {
+                        // Method 2: Normal click
+                        acceptButton.click();
+                        clicked = true;
+                    } catch (org.openqa.selenium.ElementClickInterceptedException ex) {
+                        try {
+                            // Method 3: Actions click
+                            org.openqa.selenium.interactions.Actions actions = new org.openqa.selenium.interactions.Actions(driver);
+                            actions.moveToElement(acceptButton).click().perform();
+                            clicked = true;
+                        } catch (Exception ex2) {
+                            if (i < retries - 1) {
+                                try {
+                                    Thread.sleep(500);
+                                } catch (InterruptedException ie) {
+                                    Thread.currentThread().interrupt();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Wait for banner to disappear if click was successful
+            if (clicked) {
+                try {
+                    extendedWait.until(ExpectedConditions.invisibilityOf(banner));
+                } catch (org.openqa.selenium.TimeoutException e) {
+                    // Banner might still be visible, but continue
+                }
+            }
+        } catch (org.openqa.selenium.NoSuchElementException | org.openqa.selenium.TimeoutException e) {
+            // Banner not present or already dismissed - continue silently
+        } catch (Exception e) {
+            // Any other exception - continue silently (banner might not be present)
+        }
     }
 
     public void applyLocationFilter(Waits waits, String locationText) {

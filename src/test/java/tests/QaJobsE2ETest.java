@@ -41,6 +41,8 @@ public class QaJobsE2ETest extends BaseTest {
 
         // Step 4: Apply filters - Wait for Department filter first, then Location
         JobsListingPage jobsListingPage = new JobsListingPage(driver);
+        // Accept cookies if banner is present on this page
+        jobsListingPage.acceptCookiesIfPresent(waits);
         // Wait for Department filter to be visible first (ensures page is ready)
         jobsListingPage.waitForDepartmentFilterReady(waits);
         // Then apply location filter
@@ -57,21 +59,14 @@ public class QaJobsE2ETest extends BaseTest {
 
         // Step 7: Click "View Role" on the first job card
         JobsListingPage.JobCard firstJobCard = jobCards.get(0);
-        // Wait for View Role button to be clickable and scroll into view
+        // Wait for View Role button to be clickable (no scroll on this page)
         WebElement viewRoleElement = firstJobCard.getViewRoleElement();
-        waits.clickable(viewRoleElement);
-        // Scroll into view before clicking
-        ((JavascriptExecutor) driver).executeScript(
-            "arguments[0].scrollIntoView({behavior: 'auto', block: 'center', inline: 'nearest'});",
-            viewRoleElement
-        );
-        // Wait again after scrolling to ensure element is clickable
         waits.clickable(viewRoleElement);
         // Try normal click first, fallback to JS click if needed
         try {
             viewRoleElement.click();
         } catch (org.openqa.selenium.ElementClickInterceptedException e) {
-            // Fallback to JavaScript click
+            // Fallback to JavaScript click (without scrolling)
             ((JavascriptExecutor) driver).executeScript("arguments[0].click();", viewRoleElement);
         }
 
@@ -93,12 +88,29 @@ public class QaJobsE2ETest extends BaseTest {
             waits.urlContains("lever");
             Assert.assertTrue(driver.getCurrentUrl().contains("lever"),
                 "URL should contain 'lever' after clicking View Role. Current URL: " + driver.getCurrentUrl());
-            // Stay on Lever page - don't close tab or switch back
         } else {
-            // Same window navigation - verify URL and stay on Lever page
+            // Same window navigation - verify URL
             waits.urlContains("lever");
             Assert.assertTrue(driver.getCurrentUrl().contains("lever"),
                 "URL should contain 'lever' after clicking View Role. Current URL: " + driver.getCurrentUrl());
+        }
+        
+        // Wait for page to be fully loaded
+        waits.getWait().until((org.openqa.selenium.support.ui.ExpectedCondition<Boolean>) webDriver -> {
+            org.openqa.selenium.JavascriptExecutor js = (org.openqa.selenium.JavascriptExecutor) webDriver;
+            return "complete".equals(js.executeScript("return document.readyState"));
+        });
+        
+        // Scroll down to view more content (smooth scroll)
+        ((JavascriptExecutor) driver).executeScript(
+            "window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});"
+        );
+        
+        // Wait 10 seconds
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
     }
 }

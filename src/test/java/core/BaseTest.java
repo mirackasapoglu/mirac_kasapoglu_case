@@ -16,7 +16,6 @@ public abstract class BaseTest {
 
     @AfterMethod(alwaysRun = true)
     public void tearDown() {
-        // Browser'ı açık bırakmak için quit driver çağrısı yorum satırına alındı
-        // DriverFactory.quitDriver(driver);
+        DriverFactory.quitDriver(driver); // Close browser after test
     }
 }
